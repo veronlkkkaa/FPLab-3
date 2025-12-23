@@ -28,9 +28,8 @@
   "Оптимизация памяти: удаление избыточных данных из состояния"
   (fn [algorithm-type _config _current-state] algorithm-type))
 
-;; ========================================
 ;; Линейная интерполяция
-;; ========================================
+
 
 (defn locate-interval
   "Находит два последовательных узла [p1 p2], между которыми лежит target-x"
@@ -69,37 +68,36 @@
 (defmethod reduce-state-size :linear [_ _config state]
   (update state :points trim-queue 2))
 
-;; ========================================
 ;; Интерполяция методом Ньютона
-;; ========================================
+
 
 (defn select-optimal-window
   "Выбор оптимального окна точек для интерполяции Ньютона"
   [data-points window-size target-x]
   (let [total-points (count data-points)]
     (cond
-      (zero? total-points) 
+      (zero? total-points)
       []
-      
-      (<= total-points window-size) 
+
+      (<= total-points window-size)
       (vec data-points)
-      
+
       :else
       (let [nearest-index
             (->> data-points
                  (map-indexed vector)
-                 (map (fn [[idx pt]] 
+                 (map (fn [[idx pt]]
                         [idx (Math/abs ^double (- target-x (:x pt)))]))
                  (apply min-key second)
                  first)
-            
+
             actual-size (min window-size total-points)
             half-window (quot (dec actual-size) 2)
             raw-start (- nearest-index half-window)
             window-start (-> raw-start
                              (max 0)
                              (min (- total-points actual-size)))]
-        
+
         (subvec (vec data-points) window-start (+ window-start actual-size))))))
 
 (defn build-difference-table
@@ -119,9 +117,9 @@
                 []
                 (mapv (fn [idx]
                         (let [numerator (- (current-table (inc idx))
-                                         (current-table idx))
+                                           (current-table idx))
                               denominator (- (x-coords (+ idx level 1))
-                                           (x-coords idx))]
+                                             (x-coords idx))]
                           (/ numerator denominator)))
                       (range (- num-points level 1))))]
           (recur (inc level) next-table next-coeff))))))
@@ -158,10 +156,10 @@
   (let [available-points (:points state)
         required-points (:n state)]
     (when (and required-points (>= (count available-points) required-points))
-      (let [interpolated-y (calculate-newton-interpolation 
-                             available-points 
-                             required-points 
-                             target-x)]
+      (let [interpolated-y (calculate-newton-interpolation
+                            available-points
+                            required-points
+                            target-x)]
         {:alg :newton :x target-x :y interpolated-y}))))
 
 (defmethod reduce-state-size :newton [_ _config state]
@@ -170,17 +168,15 @@
       (update state :points trim-queue (inc required-points))
       state)))
 
-;; ========================================
 ;; Потоковая обработка данных
-;; ========================================
 
-(defn sanitize-zero 
+(defn sanitize-zero
   "Нормализация отрицательного нуля к положительному"
   [value]
   (let [num (double value)]
     (if (== num -0.0) 0.0 num)))
 
-(defn create-initial-state 
+(defn create-initial-state
   "Создание начального состояния для всех алгоритмов"
   []
   {:linear {:points clojure.lang.PersistentQueue/EMPTY
@@ -193,24 +189,24 @@
   [algorithm-type configuration algorithm-state upper-bound]
   (if-not (has-sufficient-data? algorithm-type configuration algorithm-state)
     {:state algorithm-state :outputs []}
-    
+
     (let [discretization-step (:step configuration)
           starting-point (or (:next-x algorithm-state)
-                            (some-> algorithm-state :points first :x))]
+                             (some-> algorithm-state :points first :x))]
       (if (nil? starting-point)
         {:state algorithm-state :outputs []}
-        
+
         (loop [current-x starting-point
                accumulated-outputs []]
           (if (> current-x upper-bound)
             {:state (assoc algorithm-state :next-x current-x)
              :outputs accumulated-outputs}
-            
-            (let [interpolation-result (compute-interpolation 
-                                         algorithm-type 
-                                         algorithm-state 
-                                         current-x)
-                  new-outputs (if interpolation-result 
+
+            (let [interpolation-result (compute-interpolation
+                                        algorithm-type
+                                        algorithm-state
+                                        current-x)
+                  new-outputs (if interpolation-result
                                 (conj accumulated-outputs interpolation-result)
                                 accumulated-outputs)]
               (recur (+ current-x discretization-step) new-outputs))))))))
@@ -222,14 +218,14 @@
         (if (:linear? configuration)
           (generate-outputs-for-algorithm :linear configuration (:linear state) upper-x-bound)
           {:state (:linear state) :outputs []})
-        
+
         newton-result
         (if (:newton? configuration)
           (generate-outputs-for-algorithm :newton configuration (:newton state) upper-x-bound)
           {:state (:newton state) :outputs []})
-        
+
         combined-outputs (into (:outputs linear-result) (:outputs newton-result))]
-    
+
     {:state {:linear (:state linear-result)
              :newton (:state newton-result)}
      :outputs combined-outputs}))
@@ -242,30 +238,30 @@
         (if (:linear? configuration)
           (append-data-point :linear (:linear state) incoming-point)
           (:linear state))
-        
+
         updated-newton-state
         (if (:newton? configuration)
           (assoc (append-data-point :newton (:newton state) incoming-point)
                  :n (:n configuration))
           (:newton state))
-        
+
         ;; Ограничиваем размер состояния
         trimmed-linear-state
         (if (:linear? configuration)
           (reduce-state-size :linear configuration updated-linear-state)
           updated-linear-state)
-        
+
         trimmed-newton-state
         (if (:newton? configuration)
           (reduce-state-size :newton configuration updated-newton-state)
           updated-newton-state)
-        
+
         current-state {:linear trimmed-linear-state
                        :newton trimmed-newton-state}
-        
+
         max-x-value (:x incoming-point)
-        
+
         result (generate-all-outputs configuration current-state max-x-value)]
-    
+
     {:state (:state result)
      :outputs (:outputs result)}))

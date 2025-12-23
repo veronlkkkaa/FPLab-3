@@ -53,8 +53,8 @@
                     :else
                     (let [expected-value (+ y1 (* (/ (- target-x x1) (- x2 x1))
                                                   (- y2 y1)))
-                          actual-value (interpolator/calculate-linear-interpolation 
-                                        [pt1 pt2] 
+                          actual-value (interpolator/calculate-linear-interpolation
+                                        [pt1 pt2]
                                         target-x)]
                       (< (Math/abs (- actual-value expected-value)) 1e-9))))))
 
@@ -72,8 +72,8 @@
 
                     ;; Проверяем, что интерполированное значение между границами
                     (let [middle-x (/ (+ (:x pt2) (:x pt3)) 2)
-                          interpolated-y (interpolator/calculate-linear-interpolation 
-                                          data-points 
+                          interpolated-y (interpolator/calculate-linear-interpolation
+                                          data-points
                                           middle-x)
                           min-y (min (:y pt2) (:y pt3))
                           max-y (max (:y pt2) (:y pt3))]
