@@ -19,18 +19,18 @@
           ;; Добавляем первую точку
           result1 (interpolator/handle-new-point config initial-state {:x 0 :y 0})
           normalized-outputs1 (map #(-> %
-                                       (update :x interpolator/sanitize-zero)
-                                       (update :y interpolator/sanitize-zero))
-                                  (:outputs result1))]
+                                        (update :x interpolator/sanitize-zero)
+                                        (update :y interpolator/sanitize-zero))
+                                   (:outputs result1))]
 
       (is (= [] normalized-outputs1))
 
       ;; Добавляем вторую точку
       (let [result2 (interpolator/handle-new-point config (:state result1) {:x 1 :y 1})
             normalized-outputs2 (map #(-> %
-                                         (update :x interpolator/sanitize-zero)
-                                         (update :y interpolator/sanitize-zero))
-                                    (:outputs result2))]
+                                          (update :x interpolator/sanitize-zero)
+                                          (update :y interpolator/sanitize-zero))
+                                     (:outputs result2))]
 
         (is (= [{:alg :linear :x 0.0 :y 0.0}
                 {:alg :linear :x 1.0 :y 1.0}]
