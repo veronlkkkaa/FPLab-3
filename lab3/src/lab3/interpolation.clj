@@ -30,7 +30,6 @@
 
 ;; Линейная интерполяция
 
-
 (defn locate-interval
   "Находит два последовательных узла [p1 p2], между которыми лежит target-x"
   [data-points target-x]
@@ -69,7 +68,6 @@
   (update state :points trim-queue 2))
 
 ;; Интерполяция методом Ньютона
-
 
 (defn select-optimal-window
   "Выбор оптимального окна точек для интерполяции Ньютона"
