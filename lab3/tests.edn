@@ -1,0 +1,12 @@
+#kaocha/v1
+ {:reporter kaocha.report/documentation
+  :color? true
+  :tests [{:id :unit
+           :test-paths ["test"]
+           :ns-patterns [".*interpolation-test*"]}
+          {:id :property-based
+           :test-paths ["test"]
+           :ns-patterns [".*properties-test*"]}
+          {:id :core
+           :test-paths ["test"]
+           :ns-patterns [".*core-test*"]}]}

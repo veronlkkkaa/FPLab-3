@@ -1,0 +1,6 @@
+.clj-kondo
+lab3/target/classes/META-INF/maven/lab2/lab2/pom.properties
+lab3/target/stale/leiningen.core.classpath.extract-native-dependencies
+lab3/CHANGELOG.md
+lab3/doc/intro.md
+lab3/README.md
