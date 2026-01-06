@@ -4,3 +4,9 @@ lab3/target/stale/leiningen.core.classpath.extract-native-dependencies
 lab3/CHANGELOG.md
 lab3/doc/intro.md
 lab3/README.md
+# IDE / tooling
+.lsp/
+.lsp/.cache/db.transit.json
+
+# Licenses inside labs
+lab3/LICENSE
