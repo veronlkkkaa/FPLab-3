@@ -21,6 +21,34 @@
    - :max-points  - получить макс. кол-во точек для хранения"
   (fn [operation alg & _] [operation alg]))
 
+;; Stream processing helper
+
+(defn produce-outputs-for-alg
+  "Считает выходы для одного алгоритма и обновляет его стейт."
+  [alg opts alg-state max-x]
+  (if-not (interpolate :ready? alg alg-state opts)
+    {:state alg-state
+     :outputs []}
+    (let [step    (:step opts)
+          start-x (or (:next-x alg-state)
+                      (some-> alg-state :points first :x))]
+      (if (nil? start-x)
+        {:state alg-state
+         :outputs []}
+        (loop [x    start-x
+               outs []]
+          (if (> x max-x)
+            {:state   (assoc alg-state :next-x x)
+             :outputs outs}
+            (let [points (:points alg-state)
+                  n      (:n alg-state)
+                  y      (if (= alg :linear)
+                           (interpolate :compute alg points x)
+                           (interpolate :compute alg points n x))
+                  res    (when y {:alg alg :x x :y y})
+                  outs'  (if res (conj outs res) outs)]
+              (recur (+ x step) outs'))))))))
+
 ;; Linear
 
 (defn find-segment
@@ -152,7 +180,7 @@
     {:state state
      :outputs outputs}))
 
-  ;; Stream processing
+  ;; State management
 
 (defn normalize-zero [x]
   (let [d (double x)]
@@ -163,32 +191,6 @@
             :next-x nil}
    :newton {:points clojure.lang.PersistentQueue/EMPTY
             :next-x nil}})
-
-(defn produce-outputs-for-alg
-  "Считает выходы для одного алгоритма и обновляет его стейт."
-  [alg opts alg-state max-x]
-  (if-not (interpolate :ready? alg alg-state opts)
-    {:state alg-state
-     :outputs []}
-    (let [step    (:step opts)
-          start-x (or (:next-x alg-state)
-                      (some-> alg-state :points first :x))]
-      (if (nil? start-x)
-        {:state alg-state
-         :outputs []}
-        (loop [x    start-x
-               outs []]
-          (if (> x max-x)
-            {:state   (assoc alg-state :next-x x)
-             :outputs outs}
-            (let [points (:points alg-state)
-                  n      (:n alg-state)
-                  y      (if (= alg :linear)
-                           (interpolate :compute alg points x)
-                           (interpolate :compute alg points n x))
-                  res    (when y {:alg alg :x x :y y})
-                  outs'  (if res (conj outs res) outs)]
-              (recur (+ x step) outs'))))))))
 
 (defn handle-datapoint
   "Обрабатывает входящую точку для всех активных алгоритмов"
