@@ -7,20 +7,20 @@
   (testing "Linear interpolation between two points"
     (let [points [{:x 0 :y 0}
                   {:x 10 :y 10}]]
-      (is (= 5 (interp/compute-linear points 5)))
-      (is (= 0 (interp/compute-linear points 0)))
-      (is (= 10 (interp/compute-linear points 10))))))
+      (is (= 5 (interp/interpolate :compute :linear points 5)))
+      (is (= 0 (interp/interpolate :compute :linear points 0)))
+      (is (= 10 (interp/interpolate :compute :linear points 10))))))
 
 (deftest linear-three-points-test
   (testing "Linear interpolation within a set of points"
     (let [points [{:x 0 :y 0}
                   {:x 2 :y 2}
                   {:x 4 :y 4}]]
-      (is (= 3 (interp/compute-linear points 3))))))
+      (is (= 3 (interp/interpolate :compute :linear points 3))))))
 
 ; Разделённые разности
 ; y = x^2
-(deftest divided-differences-test
+(deftest calc-coefficients-test
   (testing "Divided differences for a quadratic function"
     (let [points [{:x 0 :y 0}
                   {:x 1 :y 1}

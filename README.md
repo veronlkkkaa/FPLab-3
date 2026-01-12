@@ -56,52 +56,87 @@ $P(x) = a_0 + (x - x_0)\big[a_1 + (x - x_1)[a_2 + \cdots]\big]$
 
 
 ## Ключевые элементы реализации
+
 ## Модуль `interpolation`
-- find-segment - Находит пару соседних точек [p1 p2], таких что x1 <= x <= x2
+
+### Единый полиморфный интерфейс
+
+Вся функциональность реализована через **один мультиметод** с диспетчеризацией по кортежу `[операция алгоритм]`:
 
 ``` Clojure
-(defn compute-linear
-  "Линейная интерполяция: возвращает y или nil."
-  [points x]
-  (when-let [[p1 p2] (find-segment points x)]
-    (let [x1 (:x p1)
-          y1 (:y p1)
-          x2 (:x p2)
-          y2 (:y p2)]
-      (if (= x1 x2)
-        y1
-        (let [t (/ (- x x1) (- x2 x1))]
-          (+ y1 (* t (- y2 y1))))))))
+(defmulti interpolate
+  "Главный полиморфный интерфейс для интерполяции"
+  (fn [operation alg & _] [operation alg]))
 ```
 
-Выполняет линейную интерполяцию по найденному сегменту.
-Возвращает интерполированное `y` или `nil`.
+### Поддерживаемые операции
 
-- choose-window - Выбирает окно из `n` точек, ближайших к значению `x`, для интерполяции Ньютона. Гарантирует, что окно остаётся внутри массива точек.
-- calc-coefficients - Строит таблицу разделённых разностей. Возвращает вектор коэффициентов полинома Ньютона: `[a0 a1 a2 ...]`.
-- newton-eval - Вычисляет значение полинома Ньютона в точке `x`, используя схему Горнера.
+**`:compute`** — вычисление значения интерполяции
+``` Clojure
+(interpolate :compute :linear points x)
+(interpolate :compute :newton points n x)
+```
+
+**`:process`** — обработка входящей точки
+``` Clojure
+(interpolate :process :linear opts state point)
+(interpolate :process :newton opts state point)
+```
+
+**`:ready?`** — проверка готовности алгоритма
+``` Clojure
+(interpolate :ready? :linear state opts)
+(interpolate :ready? :newton state opts)
+```
+
+**`:max-points`** — получение максимального размера окна
+``` Clojure
+(interpolate :max-points :linear opts)  ; => 2
+(interpolate :max-points :newton opts)  ; => (inc n)
+```
+
+### Реализации для линейной интерполяции
 
 ``` Clojure
-(defn compute-newton
-  "Расчёт y методом Ньютона"
-  [points n x]
-  (let [window (choose-window points n x)
-        coeffs (calc-coefficients window)]
-    (newton-eval coeffs window x)))
+(defmethod interpolate [:compute :linear]
+  [_ _ points x]
+  ;; находит сегмент и вычисляет y = y1 + t*(y2-y1)
+  ...)
+
+(defmethod interpolate [:process :linear]
+  [_ alg opts state point]
+  ;; добавляет точку, ограничивает размер, генерирует выходы
+  ...)
 ```
 
-Обёртка для вычисления методом Ньютона:
-— выбирает окно
-— вычисляет разделённые разности
-— вычисляет значение полинома
+### Реализации для метода Ньютона
 
-- ready? - Проверяет, достаточно ли точек для выбранного вида интерполяции.
-- interpolate-at-x - Вычисляет интерполяцию (линейную и/или ньютоновскую) в одной точке `x`. Возвращает список структур:
-`{:alg :linear :x x :y y}`
-`{:alg :newton :x x :y y}`.
+``` Clojure
+(defmethod interpolate [:compute :newton]
+  [_ _ points n x]
+  ;; выбирает окно, строит разделённые разности, вычисляет полином
+  ...)
 
-- produce-outputs - Генерирует результаты интерполяции на промежутке `[next-x, max-x]` с шагом `step`.
-- handle-datapoint - Принимает новую точку входного потока. Обновляет состояние и вычисляет новые выходные значения.
+(defmethod interpolate [:process :newton]
+  [_ alg opts state point]
+  ;; добавляет точку с параметром n, ограничивает размер, генерирует выходы
+  ...)
+```
+
+### Вспомогательные функции
+
+**Для линейной интерполяции:**
+- `find-segment` — находит пару соседних точек [p1 p2], таких что x1 ≤ x ≤ x2
+
+**Для метода Ньютона:**
+- `choose-window` — выбирает окно из N ближайших точек
+- `calc-coefficients` — строит таблицу разделённых разностей
+- `newton-eval` — вычисляет полином по схеме Горнера
+
+### Потоковая обработка
+- `handle-datapoint` — координирует обработку для всех активных алгоритмов через единый интерфейс `interpolate`
+- `produce-outputs-for-alg` — генерирует результаты на промежутке с заданным шагом
+- `init-state` — инициализация начального состояния
 
 ---
 
