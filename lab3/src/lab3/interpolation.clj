@@ -13,7 +13,7 @@
 (defmulti process-interpolation
   "Главный полиморфный интерфейс для интерполяции.
    Диспетчеризация: по алгоритму
-   
+
    Принимает state с полями:
    - :algorithm  - алгоритм (:linear или :newton)
    - :step       - шаг интерполяции
@@ -22,9 +22,9 @@
    - :next-x     - следующий x для вывода
    - :n          - параметр n (для Newton)
    - :max-x      - максимальный x (x новой точки)
-   
+
    Возвращает {:state новое_состояние :outputs [{:alg :x :y}...]}"
-  (fn [state] (:algorithm state)))
+  :algorithm)
 
 ;; Linear
 
