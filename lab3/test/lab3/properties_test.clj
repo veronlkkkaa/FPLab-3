@@ -38,7 +38,7 @@
                   (cond
 
                     (= x1 x2)
-                    (= (interp/interpolate :compute :linear [p1 p2] x1) y1)
+                    (= (interp/linear-interpolate [p1 p2] x1) y1)
 
                     (or (< x x1) (> x x2))
                     true
@@ -46,7 +46,7 @@
                     :else
                     (let [expected (+ y1 (* (/ (- x x1) (- x2 x1))
                                             (- y2 y1)))
-                          actual   (interp/interpolate :compute :linear [p1 p2] x)]
+                          actual   (interp/linear-interpolate [p1 p2] x)]
                       (< (Math/abs (- actual expected)) 1e-9))))))
 
 ; проверяем монотонность
@@ -63,6 +63,6 @@
                     true
 
                     (let [mid-x (/ (+ (:x p2) (:x p3)) 2)
-                          y     (interp/interpolate :compute :linear points mid-x)]
+                          y     (interp/linear-interpolate points mid-x)]
                       (and (<= (min (:y p2) (:y p3)) y)
                            (>= (max (:y p2) (:y p3)) y)))))))

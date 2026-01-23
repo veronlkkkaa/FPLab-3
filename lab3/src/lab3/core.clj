@@ -67,7 +67,7 @@
 (defn -main [& args]
   (let [opts (parse-args args)]
     (loop [state (interp/init-state)]
-      (when-some [line (read-line)]
+      (if-some [line (read-line)]
         (if-let [p (parse-point line)]
           (let [{:keys [state outputs]}
                 (interp/handle-datapoint opts state p)]
@@ -75,4 +75,9 @@
               (println (format "%s: %s %s"
                                (name alg) (fmt3 x) (fmt3 y))))
             (recur state))
-          (recur state))))))
+          (recur state))
+        ;; EOF - финализируем выходы
+        (let [outputs (interp/finalize-outputs opts state)]
+          (doseq [{:keys [alg x y]} outputs]
+            (println (format "%s: %s %s"
+                             (name alg) (fmt3 x) (fmt3 y)))))))))
