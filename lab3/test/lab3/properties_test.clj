@@ -59,10 +59,13 @@
                       x2 (:x p2)
                       x3 (:x p3)]
 
-                  (if (and (= x1 x2) (= x2 x3))
+                  (if (or (and (= x1 x2) (= x2 x3))
+                          (= x2 x3))
                     true
 
                     (let [mid-x (/ (+ (:x p2) (:x p3)) 2)
                           y     (interp/linear-interpolate points mid-x)]
-                      (and (<= (min (:y p2) (:y p3)) y)
-                           (>= (max (:y p2) (:y p3)) y)))))))
+                      (if y
+                        (and (<= (min (:y p2) (:y p3)) y)
+                             (>= (max (:y p2) (:y p3)) y))
+                        true))))))
