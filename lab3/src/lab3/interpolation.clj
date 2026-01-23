@@ -57,34 +57,34 @@
         new-points (-> points
                        (conj new-point)
                        (limit-queue 2))
-        
+
         ;; Проверяем готовность (нужно >= 2 точек)
         ready? (>= (count new-points) 2)]
-    
+
     (if-not ready?
       {:state (assoc state :points new-points :next-x nil)
        :outputs []}
-      
+
       (let [;; Определяем начальный x: если нет next-x, начинаем с первой точки
             start-x (or next-x (:x (first new-points)))
-            
+
             ;; Генерируем выходы
             outputs (loop [x start-x
-                          outs []]
-                     (if (> x max-x)
-                       outs
-                       (if-let [y (linear-interpolate new-points x)]
-                         (recur (+ x step)
-                                (conj outs {:alg :linear :x x :y y}))
-                         (recur (+ x step) outs))))
-            
+                           outs []]
+                      (if (> x max-x)
+                        outs
+                        (if-let [y (linear-interpolate new-points x)]
+                          (recur (+ x step)
+                                 (conj outs {:alg :linear :x x :y y}))
+                          (recur (+ x step) outs))))
+
             ;; Вычисляем новый next-x
             new-next-x (if (empty? outputs)
-                        start-x  ; Если ничего не вывели, сохраняем start-x
-                        (let [last-out-x (:x (last outputs))]
-                          (+ last-out-x step)))]
-        
-        {:state (assoc state 
+                         start-x  ; Если ничего не вывели, сохраняем start-x
+                         (let [last-out-x (:x (last outputs))]
+                           (+ last-out-x step)))]
+
+        {:state (assoc state
                        :points new-points
                        :next-x new-next-x)
          :outputs outputs}))))
@@ -165,33 +165,33 @@
         new-points (-> points
                        (conj new-point)
                        (limit-queue max-points))
-        
+
         ;; Проверяем готовность (нужно >= n точек)
         ready? (>= (count new-points) n)]
-    
+
     (if-not ready?
       {:state (assoc state :points new-points :next-x nil)
        :outputs []}
-      
+
       (let [;; Определяем начальный x: если нет next-x, начинаем с первой точки
             start-x (or next-x (:x (first new-points)))
-            
+
             ;; Генерируем выходы
             outputs (loop [x start-x
-                          outs []]
-                     (if (> x max-x)
-                       outs
-                       (let [y (newton-interpolate new-points n x)]
-                         (recur (+ x step)
-                                (conj outs {:alg :newton :x x :y y})))))
-            
+                           outs []]
+                      (if (> x max-x)
+                        outs
+                        (let [y (newton-interpolate new-points n x)]
+                          (recur (+ x step)
+                                 (conj outs {:alg :newton :x x :y y})))))
+
             ;; Вычисляем новый next-x
             new-next-x (if (empty? outputs)
-                        start-x  ; Если ничего не вывели, сохраняем start-x
-                        (let [last-out-x (:x (last outputs))]
-                          (+ last-out-x step)))]
-        
-        {:state (assoc state 
+                         start-x  ; Если ничего не вывели, сохраняем start-x
+                         (let [last-out-x (:x (last outputs))]
+                           (+ last-out-x step)))]
+
+        {:state (assoc state
                        :points new-points
                        :next-x new-next-x)
          :outputs outputs}))))
