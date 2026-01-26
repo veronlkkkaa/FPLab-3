@@ -309,7 +309,7 @@
     (conj {:type :linear
            :points clojure.lang.PersistentQueue/EMPTY
            :next-x nil})
-    
+
     (:newton? opts)
     (conj {:type :newton
            :points clojure.lang.PersistentQueue/EMPTY
@@ -321,16 +321,16 @@
   [opts state point]
   (let [step (:step opts)
         max-x (:x point)
-        
+
         ;; Обрабатываем все интерполяторы через map
         results (map (fn [interpolator]
                        (process-interpolator interpolator point step max-x))
                      state)
-        
+
         ;; Извлекаем новые интерполяторы и выходы
         new-interpolators (mapv :interpolator results)
         all-outputs (mapcat :outputs results)]
-    
+
     {:state new-interpolators
      :outputs (vec all-outputs)}))
 
