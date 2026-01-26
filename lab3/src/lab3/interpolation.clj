@@ -26,6 +26,25 @@
    Возвращает {:state новое_состояние :outputs [{:alg :x :y}...]}"
   :algorithm)
 
+(defmulti process-interpolator
+  "Обрабатывает отдельный интерполятор.
+   Диспетчеризация: по типу интерполятора (:type)
+   
+   Принимает интерполятор с полями:
+   - :type       - тип (:linear или :newton)
+   - :points     - очередь точек
+   - :next-x     - следующий x для вывода
+   - :n          - параметр n (для Newton, опционально)
+   
+   И параметры:
+   - new-point   - новая точка
+   - step        - шаг интерполяции
+   - max-x       - максимальный x
+   
+   Возвращает обновленный интерполятор с выходными данными:
+   {:interpolator новый_интерполятор :outputs [{:alg :x :y}...]}"
+  (fn [interpolator _ _ _] (:type interpolator)))
+
 ;; Linear
 
 (defn find-segment
@@ -87,6 +106,46 @@
         {:state (assoc state
                        :points new-points
                        :next-x new-next-x)
+         :outputs outputs}))))
+
+(defmethod process-interpolator :linear
+  [interpolator new-point step max-x]
+  (let [points (:points interpolator)
+        next-x (:next-x interpolator)
+        ;; Добавляем новую точку и обрезаем очередь до 2 элементов
+        new-points (-> points
+                       (conj new-point)
+                       (limit-queue 2))
+
+        ;; Проверяем готовность (нужно >= 2 точек)
+        ready? (>= (count new-points) 2)]
+
+    (if-not ready?
+      {:interpolator (assoc interpolator :points new-points :next-x nil)
+       :outputs []}
+
+      (let [;; Определяем начальный x: если нет next-x, начинаем с первой точки
+            start-x (or next-x (:x (first new-points)))
+
+            ;; Генерируем выходы
+            outputs (loop [x start-x
+                           outs []]
+                      (if (> x max-x)
+                        outs
+                        (if-let [y (linear-interpolate new-points x)]
+                          (recur (+ x step)
+                                 (conj outs {:alg :linear :x x :y y}))
+                          (recur (+ x step) outs))))
+
+            ;; Вычисляем новый next-x
+            new-next-x (if (empty? outputs)
+                         start-x  ; Если ничего не вывели, сохраняем start-x
+                         (let [last-out-x (:x (last outputs))]
+                           (+ last-out-x step)))]
+
+        {:interpolator (assoc interpolator
+                              :points new-points
+                              :next-x new-next-x)
          :outputs outputs}))))
 
 ;; Newton
@@ -196,89 +255,124 @@
                        :next-x new-next-x)
          :outputs outputs}))))
 
+(defmethod process-interpolator :newton
+  [interpolator new-point step max-x]
+  (let [points (:points interpolator)
+        next-x (:next-x interpolator)
+        n (:n interpolator)
+        ;; Добавляем новую точку и обрезаем очередь до (n+1) элементов
+        max-points (inc n)
+        new-points (-> points
+                       (conj new-point)
+                       (limit-queue max-points))
+
+        ;; Проверяем готовность (нужно >= n точек)
+        ready? (>= (count new-points) n)]
+
+    (if-not ready?
+      {:interpolator (assoc interpolator :points new-points :next-x nil)
+       :outputs []}
+
+      (let [;; Определяем начальный x: если нет next-x, начинаем с первой точки
+            start-x (or next-x (:x (first new-points)))
+
+            ;; Генерируем выходы
+            outputs (loop [x start-x
+                           outs []]
+                      (if (> x max-x)
+                        outs
+                        (let [y (newton-interpolate new-points n x)]
+                          (recur (+ x step)
+                                 (conj outs {:alg :newton :x x :y y})))))
+
+            ;; Вычисляем новый next-x
+            new-next-x (if (empty? outputs)
+                         start-x  ; Если ничего не вывели, сохраняем start-x
+                         (let [last-out-x (:x (last outputs))]
+                           (+ last-out-x step)))]
+
+        {:interpolator (assoc interpolator
+                              :points new-points
+                              :next-x new-next-x)
+         :outputs outputs}))))
+
 ;; State management
 
 (defn normalize-zero [x]
   (let [d (double x)]
     (if (= d -0.0) 0.0 d)))
 
-(defn init-state []
-  {:linear {:points clojure.lang.PersistentQueue/EMPTY
-            :next-x nil}
-   :newton {:points clojure.lang.PersistentQueue/EMPTY
-            :next-x nil}})
+(defn init-state [opts]
+  "Инициализирует вектор интерполяторов на основе опций"
+  (cond-> []
+    (:linear? opts)
+    (conj {:type :linear
+           :points clojure.lang.PersistentQueue/EMPTY
+           :next-x nil})
+    
+    (:newton? opts)
+    (conj {:type :newton
+           :points clojure.lang.PersistentQueue/EMPTY
+           :next-x nil
+           :n (:n opts)})))
 
 (defn handle-datapoint
   "Обрабатывает входящую точку для всех активных алгоритмов"
   [opts state point]
-  (let [;; Обработка linear
-        {lin-state :state lin-outs :outputs}
-        (if (:linear? opts)
-          (process-interpolation
-           {:algorithm :linear
-            :points    (:points (:linear state))
-            :new-point point
-            :step      (:step opts)
-            :next-x    (:next-x (:linear state))
-            :max-x     (:x point)})
-          {:state (:linear state) :outputs []})
+  (let [step (:step opts)
+        max-x (:x point)
+        
+        ;; Обрабатываем все интерполяторы через map
+        results (map (fn [interpolator]
+                       (process-interpolator interpolator point step max-x))
+                     state)
+        
+        ;; Извлекаем новые интерполяторы и выходы
+        new-interpolators (mapv :interpolator results)
+        all-outputs (mapcat :outputs results)]
+    
+    {:state new-interpolators
+     :outputs (vec all-outputs)}))
 
-        ;; Обработка newton
-        {new-state :state new-outs :outputs}
-        (if (:newton? opts)
-          (process-interpolation
-           {:algorithm :newton
-            :points    (:points (:newton state))
-            :new-point point
-            :step      (:step opts)
-            :next-x    (:next-x (:newton state))
-            :max-x     (:x point)
-            :n         (:n opts)})
-          {:state (:newton state) :outputs []})
+(defmulti finalize-interpolator
+  "Генерирует оставшиеся выходы для интерполятора после EOF"
+  (fn [interpolator _step] (:type interpolator)))
 
-        outputs (into lin-outs new-outs)]
-    {:state   {:linear lin-state
-               :newton new-state}
-     :outputs outputs}))
+(defmethod finalize-interpolator :linear
+  [interpolator step]
+  (let [points (:points interpolator)
+        next-x (:next-x interpolator)]
+    (if (and (>= (count points) 2) next-x)
+      (let [max-x (:x (peek points))]
+        (loop [x next-x
+               outs []]
+          (if (> x max-x)
+            outs
+            (if-let [y (linear-interpolate points x)]
+              (recur (+ x step)
+                     (conj outs {:alg :linear :x x :y y}))
+              (recur (+ x step) outs)))))
+      [])))
+
+(defmethod finalize-interpolator :newton
+  [interpolator step]
+  (let [points (:points interpolator)
+        next-x (:next-x interpolator)
+        n (:n interpolator)]
+    (if (and (>= (count points) n) next-x)
+      (let [max-x (:x (peek points))]
+        (loop [x next-x
+               outs []]
+          (if (> x max-x)
+            outs
+            (let [y (newton-interpolate points n x)]
+              (recur (+ x step)
+                     (conj outs {:alg :newton :x x :y y}))))))
+      [])))
 
 (defn finalize-outputs
   "Генерирует оставшиеся выходы после EOF"
   [opts state]
-  (let [;; Финализация linear
-        lin-outs
-        (when (:linear? opts)
-          (let [lin-state (:linear state)
-                points (:points lin-state)
-                next-x (:next-x lin-state)
-                step (:step opts)]
-            (when (and (>= (count points) 2) next-x)
-              (let [max-x (:x (peek points))]
-                (loop [x next-x
-                       outs []]
-                  (if (> x max-x)
-                    outs
-                    (if-let [y (linear-interpolate points x)]
-                      (recur (+ x step)
-                             (conj outs {:alg :linear :x x :y y}))
-                      (recur (+ x step) outs))))))))
-
-        ;; Финализация newton
-        new-outs
-        (when (:newton? opts)
-          (let [new-state (:newton state)
-                points (:points new-state)
-                next-x (:next-x new-state)
-                step (:step opts)
-                n (:n opts)]
-            (when (and (>= (count points) n) next-x)
-              (let [max-x (:x (peek points))]
-                (loop [x next-x
-                       outs []]
-                  (if (> x max-x)
-                    outs
-                    (let [y (newton-interpolate points n x)]
-                      (recur (+ x step)
-                             (conj outs {:alg :newton :x x :y y})))))))))
-
-        outputs (into (or lin-outs []) (or new-outs []))]
-    outputs))
+  (let [step (:step opts)
+        all-outputs (mapcat #(finalize-interpolator % step) state)]
+    (vec all-outputs)))

@@ -14,7 +14,7 @@
 (deftest handle-datapoint-linear-test
   (testing "Stream processing: linear interpolation"
     (let [opts   {:linear? true :newton? false :step 1 :n 4}
-          state0 (interp/init-state)
+          state0 (interp/init-state opts)
 
           ;; первая точка
           {:keys [state outputs]} (interp/handle-datapoint opts state0 {:x 0 :y 0})

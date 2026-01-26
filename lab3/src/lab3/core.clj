@@ -66,7 +66,7 @@
 
 (defn -main [& args]
   (let [opts (parse-args args)]
-    (loop [state (interp/init-state)]
+    (loop [state (interp/init-state opts)]
       (if-some [line (read-line)]
         (if-let [p (parse-point line)]
           (let [{:keys [state outputs]}
