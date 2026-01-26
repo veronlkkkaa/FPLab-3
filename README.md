@@ -59,84 +59,137 @@ $P(x) = a_0 + (x - x_0)\big[a_1 + (x - x_1)[a_2 + \cdots]\big]$
 
 ## Модуль `interpolation`
 
-### Единый полиморфный интерфейс
+### Архитектура на основе полиморфизма
 
-Вся функциональность реализована через **один мультиметод** с диспетчеризацией по кортежу `[операция алгоритм]`:
+Реализация использует **мультиметоды** для полиморфной обработки различных типов интерполяторов.
+
+### Структура состояния
+
+Состояние представляет собой **вектор интерполяторов**, где каждый интерполятор — это map с полями:
+- `:type` — тип интерполятора (`:linear` или `:newton`)
+- `:points` — очередь точек (PersistentQueue)
+- `:next-x` — следующая координата для вывода
+- `:n` — параметр n (только для Newton)
 
 ``` Clojure
-(defmulti interpolate
-  "Главный полиморфный интерфейс для интерполяции"
-  (fn [operation alg & _] [operation alg]))
+;; Пример состояния с двумя активными интерполяторами:
+[{:type :linear
+  :points #queue [...]
+  :next-x 5.0}
+ {:type :newton
+  :points #queue [...]
+  :next-x 5.0
+  :n 4}]
 ```
 
-### Поддерживаемые операции
+### Инициализация состояния
 
-**`:compute`** — вычисление значения интерполяции
+Функция `init-state` создает вектор интерполяторов на основе опций, используя `cond->`:
+
 ``` Clojure
-(interpolate :compute :linear points x)
-(interpolate :compute :newton points n x)
+(defn init-state [opts]
+  (cond-> []
+    (:linear? opts)
+    (conj {:type :linear
+           :points clojure.lang.PersistentQueue/EMPTY
+           :next-x nil})
+
+    (:newton? opts)
+    (conj {:type :newton
+           :points clojure.lang.PersistentQueue/EMPTY
+           :next-x nil
+           :n (:n opts)})))
 ```
 
-**`:process`** — обработка входящей точки
+Это позволяет добавлять только нужные интерполяторы при старте.
+
+### Мультиметод `process-interpolator`
+
+Главный полиморфный интерфейс с диспетчеризацией по типу интерполятора:
+
 ``` Clojure
-(interpolate :process :linear opts state point)
-(interpolate :process :newton opts state point)
+(defmulti process-interpolator
+  (fn [interpolator _ _ _] (:type interpolator)))
+
+(defmethod process-interpolator :linear
+  [interpolator new-point step max-x]
+  ;; обрабатывает точку для линейной интерполяции
+  {:interpolator обновленный-интерполятор
+   :outputs [{:alg :linear :x ... :y ...}]})
+
+(defmethod process-interpolator :newton
+  [interpolator new-point step max-x]
+  ;; обрабатывает точку для интерполяции Ньютона
+  {:interpolator обновленный-интерполятор
+   :outputs [{:alg :newton :x ... :y ...}]})
 ```
 
-**`:ready?`** — проверка готовности алгоритма
+### Обработка точек без дублирования кода
+
+Функция `handle-datapoint` использует `map` для обработки всех интерполяторов:
+
 ``` Clojure
-(interpolate :ready? :linear state opts)
-(interpolate :ready? :newton state opts)
+(defn handle-datapoint [opts state point]
+  (let [step (:step opts)
+        max-x (:x point)
+
+        ;; Обрабатываем все интерполяторы через map
+        results (map (fn [interpolator]
+                       (process-interpolator interpolator point step max-x))
+                     state)
+
+        ;; Извлекаем новые интерполяторы и выходы
+        new-interpolators (mapv :interpolator results)
+        all-outputs (mapcat :outputs results)]
+
+    {:state new-interpolators
+     :outputs (vec all-outputs)}))
 ```
 
-**`:max-points`** — получение максимального размера окна
-``` Clojure
-(interpolate :max-points :linear opts)  ; => 2
-(interpolate :max-points :newton opts)  ; => (inc n)
-```
+Нет условных конструкций `if` — все алгоритмы обрабатываются единообразно через полиморфизм.
 
-### Реализации для линейной интерполяции
+### Финализация выходов
+
+Мультиметод `finalize-interpolator` генерирует оставшиеся выходы после EOF:
 
 ``` Clojure
-(defmethod interpolate [:compute :linear]
-  [_ _ points x]
-  ;; находит сегмент и вычисляет y = y1 + t*(y2-y1)
+(defmulti finalize-interpolator
+  (fn [interpolator _step] (:type interpolator)))
+
+(defmethod finalize-interpolator :linear [interpolator step]
+  ;; генерирует оставшиеся точки для линейной интерполяции
   ...)
 
-(defmethod interpolate [:process :linear]
-  [_ alg opts state point]
-  ;; добавляет точку, ограничивает размер, генерирует выходы
-  ...)
-```
-
-### Реализации для метода Ньютона
-
-``` Clojure
-(defmethod interpolate [:compute :newton]
-  [_ _ points n x]
-  ;; выбирает окно, строит разделённые разности, вычисляет полином
+(defmethod finalize-interpolator :newton [interpolator step]
+  ;; генерирует оставшиеся точки для интерполяции Ньютона
   ...)
 
-(defmethod interpolate [:process :newton]
-  [_ alg opts state point]
-  ;; добавляет точку с параметром n, ограничивает размер, генерирует выходы
-  ...)
+(defn finalize-outputs [opts state]
+  (let [step (:step opts)
+        all-outputs (mapcat #(finalize-interpolator % step) state)]
+    (vec all-outputs)))
 ```
 
 ### Вспомогательные функции
 
 **Для линейной интерполяции:**
 - `find-segment` — находит пару соседних точек [p1 p2], таких что x1 ≤ x ≤ x2
+- `linear-interpolate` — вычисляет линейную интерполяцию в точке x
 
 **Для метода Ньютона:**
 - `choose-window` — выбирает окно из N ближайших точек
 - `calc-coefficients` — строит таблицу разделённых разностей
 - `newton-eval` — вычисляет полином по схеме Горнера
+- `newton-interpolate` — полная интерполяция в точке x
 
-### Потоковая обработка
-- `handle-datapoint` — координирует обработку для всех активных алгоритмов через единый интерфейс `interpolate`
-- `produce-outputs-for-alg` — генерирует результаты на промежутке с заданным шагом
-- `init-state` — инициализация начального состояния
+### Преимущества архитектуры
+
+1. **Нет дублирования кода** — обработка всех алгоритмов выполняется через `map`
+2. **Расширяемость** — добавление нового алгоритма требует только:
+   - Добавить новый `defmethod` для `process-interpolator`
+   - Добавить новый `defmethod` для `finalize-interpolator`
+   - Обновить `init-state` для создания нового типа интерполятора
+3. **Чистый функциональный стиль** — использование `cond->`, `map`, `mapcat` вместо условных конструкций
 
 ---
 
@@ -209,7 +262,7 @@ x,y
 ``` Clojure
 (defn -main [& args]
   (let [opts (parse-args args)]
-    (loop [state (interp/init-state)]
+    (loop [state (interp/init-state opts)]
       (when-some [line (read-line)]
         (if-let [p (parse-point line)]
           (let [{:keys [state outputs]}
